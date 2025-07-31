@@ -3,9 +3,8 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import {z} from "zod"
-
+import { auth } from "@/firebase/client";
 import Image from "next/image"
-
 import { Button } from "@/components/ui/button"
 import {Form} from "@/components/ui/form";
 import Link from "next/link";
@@ -13,7 +12,11 @@ import { toast } from "sonner";
 import FormField from "@/components/FormField";
 import { useRouter } from "next/navigation"
 
-
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import { signIn, signUp } from "@/lib/actions/auth.action";
 
 
 const authFormSchema = (type: FormType) => {
@@ -38,20 +41,52 @@ const AuthForm = ({type}: {type:FormType}) => {
   })
 
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    try{
-      if(type === "sign-up") {
-        toast.success("Account created successfully!");
-        router.push('/sign-in');
-      } else {
-        toast.success("Sign in successfully!");
-        router.push('/');
+async function onSubmit(values: z.infer<typeof formSchema>) {
+  try {
+    if (type === "sign-up") {
+      const { name, email, password } = values; // ✅ use values
+
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+      const result = await signUp({
+        uid: userCredential.user.uid,
+        name: name!,
+        email,
+        password,
+      });
+
+      if (!result?.success) {
+        toast.error(result?.message);
+        return;
       }
-    }catch (error) {
-      console.log(error);
-      toast.error(`An error occurred: ${error}`);
+
+      toast.success("Account created successfully!");
+      router.push('/sign-in');
+    } else {
+      const { email, password } = values; // ✅ use values
+
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+      const idToken = await userCredential.user.getIdToken();
+      if (!idToken) {
+        toast.error("Sign in Failed. Please try again.");
+        return;
+      }
+
+      await signIn({
+        email,
+        idToken,
+      });
+
+      toast.success("Sign in successfully!");
+      router.push('/');
     }
+  } catch (error) {
+    console.log(error);
+    toast.error(`An error occurred: ${error}`);
   }
+}
+
 
   const isSignIn = type === "sign-in";
 
@@ -104,5 +139,6 @@ const AuthForm = ({type}: {type:FormType}) => {
       </div>
   )
 }
+
 
 export default AuthForm
